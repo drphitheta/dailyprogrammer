@@ -1,3 +1,4 @@
+/* http://www.reddit.com/r/dailyprogrammer/1epasu/ */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
