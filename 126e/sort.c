@@ -5,7 +5,15 @@
 
 int compare(const void *a, const void *b)
 {
-	return *(const int *) a > *(const int *) b;
+	int c = *(const int *)a;
+	int d = *(const int *)b;
+
+	if ( c > d)
+		return 1;
+	else if ( c < d)
+		return -1;
+	else 
+		return 0;
 }
 
 int main(int argc, char **argv)
