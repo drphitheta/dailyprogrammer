@@ -3,110 +3,126 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+
+#define MAX_INSTRUCTIONS 100000
+static int INDEX; /* next line to read from in file */
 
 int Cand(char *reg, int num_args, int *args)
 {
 	int arg1, arg2;
 	if (num_args != 2)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	arg2 = args[1];
 	reg[arg1] = reg[arg1] & reg[arg2];
 
-	return 0;
+	return 1;
 }
 
 int Cor(char *reg, int num_args, int *args)
 {
 	int arg1, arg2;
 	if (num_args != 2)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	arg2 = args[1];
 	reg[arg1] = reg[arg1] | reg[arg2];
 
-	return 0;
+	return 1;
 }
 
 int Cxor(char *reg, int num_args, int *args)
 {
 	int arg1, arg2;
 	if (num_args != 2)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	arg2 = args[1];
 	reg[arg1] = reg[arg1] ^ reg[arg2];
 
-	return 0;
+	return 1;
 }
 
 int Cnot(char *reg, int num_args, int *args)
 {
 	int arg1;
 	if (num_args != 1)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	reg[arg1] = ~(reg[arg1]);
 
-	return 0;
+	return 1;
 }
 
 int Cmov(char *reg, int num_args, int *args)
 {
 	int arg1, arg2;
 	if (num_args != 2)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	arg2 = args[1];
 	reg[arg1] = reg[arg2];
 
-	return 0;
+	return 1;
 }
 
 int Cset(char *reg, int num_args, int *args)
 {
 	int arg1, arg2;
 	if (num_args != 2)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	arg2 = args[1];
 	reg[arg1] = arg2;
 
-	return 0;
+	return 1;
 }
 
 int Crand(char *reg, int num_args, int *args)
 {
 	int arg1;
 	if (num_args != 1)
-		return 0;
+		return -1;
 
 	arg1 = args[0];
 	reg[arg1] = rand() % 1;
 
-	return 0;
+	return 1;
 }
 
-/* XXX */
+/* JMP to INDEX args[0] */
 int Cjmp(char *reg, int num_args, int *args)
 {
-	return 0;
-}
-/* XXX */
-int Cjz(char *reg, int num_args, int *args)
-{
-	return 0;
+	if (num_args != 1)
+		return -1;
+
+	INDEX = args[0];
+	return 1;
 }
 
+/* if args[1] == 0, JMP to INDEX args[0] */
+int Cjz(char *reg, int num_args, int *args)
+{
+	if (num_args != 2)
+		return -1;
+
+	if (reg[args[1]] == 0)
+		INDEX = args[0];
+
+	return 1;
+}
+
+/* Do nothing, return halt signal */
 int Chalt(char *reg, int num_args, int *args)
 {
-	return -1;
+	return 0;
 }
 
 typedef struct cmd_table_s {
@@ -128,74 +144,79 @@ static cmd_table_t cmd_table[] = {
 	{NULL, NULL},
 };
 
-int parseFile(char *filename)
+char **fileToBuf(char *filename)
 {
-	FILE *in = fopen(filename, "rb");
-	int st; /* return value */
-	int i;
-	char lbuf[80]; /* current line */
+	FILE *in;
+	char **buf;
+	int length = 0;
 
-	char *buf;
-	char instr[16]; /* instruction */
-	/* 'arguments' of the instructions */
-	int num_args, args[2];
-	int instructions = 0;
+	in = fopen(filename, "rb");
+	fseek(in, 0, SEEK_END);
 
-	/* 32 1-bit registers */
-	char reg[32];
-	memset(reg, 0x00, sizeof(reg)/sizeof(reg[0]));
+	/* Get lenght of file */
+	length = ftell(in);
 
-	if (!in) {
-		fprintf(stderr, "Unable to read file: %s\n", filename);
-		return -1;
-	}
+	/* rewind to beginning of file */
+	fseek(in, 0, SEEK_SET);
 
-	do {
-		fgets(lbuf, sizeof(lbuf), in);
-		num_args = sscanf(lbuf, " %s %d %d ", instr, &args[0], &args[1]);
+	/* Allocate enough memory for entire file */
+	buf = calloc(length, sizeof(char));
 
-		if (instr[0] == '\0')
-			continue;
+	/* Read file into buffer */
+	fread(buf, sizeof(char), length, in);
+	fclose(in);
 
-		printf("'%s' executed.\n", instr);
-
-		for (i = 0; cmd_table[i].cmd != NULL; i++)
-			if (strstr(cmd_table[i].cmd, buf) == cmd_table[i].cmd)
-				break;
-
-		if (cmd_table[i].cmd == NULL) {
-			fprintf(stderr, "Invalid command '%s' found.\n", buf);
-			continue;
-		}
-
-		st = cmd_table[i].fcn(reg, num_args, &args[0]);
-		instructions++;
-
-		if (instructions >= 100000)
-			break;
-
-		/* halt signal receieved */
-		if (st == -1)
-			break;
-
-		/* jmp to a location in the file */
-		if (st >= 1)
-			;
-
-	} while(1);
-
-	return instructions;
+	return buf;
 }
 
 int main(int argc, char **argv)
 {
-	char *data = "halt.asm";
-	int instructions;
+	char *filename = "halt.asm";
+	char **buf;
+	int st, i, instructions;
 
-	if ((instructions = parseFile(data)) == -1)
-		return 1;
+	char lbuf[16];
+	int num_args, args[2];
 
-	printf("Program halts! %d instructions executed!\n");
+	/* 32 1-bit registers */
+	char reg[4];
+	memset(reg, 0x00, sizeof(reg)/sizeof(reg[0]));
+
+	srand(time(NULL));
+	buf = fileToBuf(filename);
+
+	do {
+		/* read in the next INDEX line from buffer */
+		num_args = sscanf(buf[INDEX], "%s %d %d ", lbuf, &args[0], &args[1]);
+
+		/* Find which command to execute */
+		for (i = 0; cmd_table[i].cmd != NULL; i++)
+			if (strstr(cmd_table[i].cmd, lbuf) == cmd_table[i].cmd)
+				break;
+
+		if (cmd_table[i].cmd == NULL) {
+			fprintf(stderr, "Invalid command '%s' found.\n", lbuf);
+			continue;
+		}
+
+		/* on next read start at following line, unless executing a JMP or JZ
+		 * instruction, in which case those are handeled automatically. */
+		instructions++, INDEX++;
+		st = cmd_table[i].fcn(reg, num_args, &args[0]);
+
+		if (instructions >= MAX_INSTRUCTIONS)
+			break;
+
+		/* halt signal receieved */
+		if (st == 0)
+			break;
+		else if (st == -1) /* error recieved */
+			fprintf(stderr, "line %d: Unexpected number of arguments: '%s'",
+					lbuf, INDEX);
+
+	} while(1);
+
+	printf("Program halts! %d instructions executed!\n", instructions);
 
 	return (0);
 }
