@@ -125,12 +125,10 @@ int Chalt(char *reg, int num_args, int *args)
 	return 0;
 }
 
-typedef struct cmd_table_s {
+struct cmd_table_t {
 	char *cmd;
 	int (*fcn)(char *, int, int *);
-} cmd_table_t;
-
-static cmd_table_t cmd_table[] = {
+} cmd_table[] = {
 	{"AND", Cand},
 	{"OR", Cor},
 	{"XOR", Cxor},
@@ -144,10 +142,11 @@ static cmd_table_t cmd_table[] = {
 	{NULL, NULL},
 };
 
-char **fileToBuf(char *filename)
+#if 0
+char *fileToBuf(char *filename)
 {
 	FILE *in;
-	char **buf;
+	char *buf;
 	int length = 0;
 
 	in = fopen(filename, "rb");
@@ -168,22 +167,21 @@ char **fileToBuf(char *filename)
 
 	return buf;
 }
+#endif
 
 int main(int argc, char **argv)
 {
-	char *filename = "halt.asm";
-	char **buf;
+	char *buf;
 	int st, i, instructions;
 
 	char lbuf[16];
 	int num_args, args[2];
 
 	/* 32 1-bit registers */
-	char reg[4];
-	memset(reg, 0x00, sizeof(reg)/sizeof(reg[0]));
+	char reg[4] = { 0x00, 0x00, 0x00, 0x00 };
 
 	srand(time(NULL));
-	buf = fileToBuf(filename);
+	buf = fileToBuf("halt.asm");
 
 	do {
 		/* read in the next INDEX line from buffer */
@@ -204,18 +202,21 @@ int main(int argc, char **argv)
 		instructions++, INDEX++;
 		st = cmd_table[i].fcn(reg, num_args, &args[0]);
 
-		if (instructions >= MAX_INSTRUCTIONS)
-			break;
+		if (instructions >= MAX_INSTRUCTIONS) {
+			fprintf(stderr, "Program does not halt.\n");
+			exit(1);
+		}
 
 		/* halt signal receieved */
 		if (st == 0)
 			break;
 		else if (st == -1) /* error recieved */
 			fprintf(stderr, "line %d: Unexpected number of arguments: '%s'",
-					lbuf, INDEX);
+					INDEX, lbuf);
 
 	} while(1);
 
+	free(buf);
 	printf("Program halts! %d instructions executed!\n", instructions);
 
 	return (0);

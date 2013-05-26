@@ -1,4 +1,3 @@
-5
 SET 0 1
 JZ 4 0
 RANDOM 0
